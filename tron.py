@@ -7,8 +7,8 @@ class Entity():
     def __init__(self, x, y, speed, char):
         self.x = x
         self.y = y
-        self.old_x = 0
-        self.old_y = 0
+        self.old_x = x
+        self.old_y = y
         self.old_positions = []
         self.speed = speed
         self.char = char # character representation of that entity.
@@ -17,10 +17,11 @@ class Entity():
 
     # update_position ... Updates the x and y coordinates of the entity.
     def update_position(self, x, y):
-        self.old_x = self.x
-        self.old_y = self.y
 
-        self.old_positions.append((self.old_x, self.old_y))
+        if (self.x, self.y) != (x, y):
+            self.old_x = self.x
+            self.old_y = self.y
+            self.old_positions.append((self.old_x, self.old_y))
 
         self.x = x
         self.y = y
@@ -57,11 +58,17 @@ class Player(Entity):
         
     def get_input(self, scr):
         return(scr.getch())
+    
+    def game_over(self, scr):
+        game_over(scr)
 
 # Enemy ... The enemy class, inherits Entity.
 class Enemey(Entity):
     def __init__(self, x, y, speed):
         Entity.__init__(self, x, y, speed, '#')
+
+    def game_over(self, scr):
+        player_win(scr)
 
 def main():
     scr = init_curses()
@@ -116,19 +123,31 @@ def draw(entities, scr):
         
         while tail > 0:
             horizontal = trail[tail][0] is not trail[tail - 1][0]
-            char = '|'
+            char = '│'
             if horizontal:
-                char = '-'
+                char = '─'
 
             tail -= 1
 
             scr.addstr(trail[tail][1], trail[tail][0], char)
-            scr.addstr(1, 1, str(trail[len(trail) - 1][0]))
+            scr.addstr(1, 1, str(entities[0].get_position()[0]) + ', ' + str(entities[0].get_position()[1]))
 
         scr.addstr(position[1], position[0], entity.get_char())
 
     scr.refresh()
     time.sleep(.04)
+
+# player_win ... The player wins!
+def player_win(scr):
+    scr.clear()
+    scr.nodelay(False)
+
+    msg = 'YOU WIN!'
+
+    scr.addstr(round(scr.getmaxyx()[0] * 1/2), round(scr.getmaxyx()[1] * 1/2) - round(len(msg) * 1/2), msg)
+    scr.refresh()
+
+    scr.getch()
 
 # game_over ... Does game over stuff.
 def game_over(scr):
@@ -137,7 +156,7 @@ def game_over(scr):
 
     msg = 'GAME OVER!'
 
-    scr.addstr(round(scr.getmaxyx()[0] * 1/2), round(scr.getmaxyx()[1] * 1/2) - round(len(msg) * 1/2), 'GAME OVER!')
+    scr.addstr(round(scr.getmaxyx()[0] * 1/2), round(scr.getmaxyx()[1] * 1/2) - round(len(msg) * 1/2), msg)
     scr.refresh()
 
     scr.getch()
@@ -166,11 +185,29 @@ def update(player, entities, scr):
         speed = entity.get_speed()
 
         new_position = (position[0] + round(direction[0] * speed), position[1] + round(direction[1] * speed))
-        if not in_bounds(new_position, scr.getmaxyx()):
-            game_over(scr)
-            return True
         
+        if not in_bounds(new_position, scr.getmaxyx()):
+            entity.game_over(scr)
+            return True
+
+        if hit_light_trail(new_position, entities):
+            entity.game_over(scr)
+            return True
+
         entity.update_position(new_position[0], new_position[1])
+
+# hit_light_trail ... Checks to see if an entity's position would be in that of a light trail.
+def hit_light_trail(position, entities):
+    light_trails = []
+
+    for entity in entities:
+        for light_trail in entity.get_old_positions():
+            light_trails.append(light_trail)
+
+    if position in light_trails:
+        return True
+
+    return False
 
 # in_bounds ... Checks if a tuple (x, y) are in bounds of the tuple bounds.
 def in_bounds(position, bounds):
